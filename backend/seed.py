@@ -1,6 +1,6 @@
 """
 Seed data script for Carbonseed backend.
-Creates initial users, factories, devices, and sample sensor data.
+Creates initial users, factories, devices, sample sensor data, and generates signals.
 """
 from datetime import datetime, timedelta
 import random
@@ -9,11 +9,122 @@ from app.database import SessionLocal, engine
 from app import models
 from app.auth import get_password_hash
 
+
+def generate_signals_for_reading(db: Session, reading: models.SensorReading, device: models.Device):
+    """Generate signals based on threshold checks for a reading"""
+    THRESHOLDS = {
+        "temperature_high": 900,
+        "gas_index_high": 400,
+        "vibration_critical": 8.0,
+        "vibration_warning": 5.0,
+        "power_consumption_high": 50,
+    }
+    
+    signals_created = []
+    
+    # Temperature check
+    if reading.temperature and reading.temperature > THRESHOLDS["temperature_high"]:
+        signal = models.Signal(
+            device_id=device.id,
+            factory_id=device.factory_id,
+            signal_type=models.SignalType.THRESHOLD_BREACH,
+            status=models.SignalStatus.NEW,
+            title="High Temperature Alert",
+            description=f"Temperature {reading.temperature:.1f}°C exceeds threshold of {THRESHOLDS['temperature_high']}°C",
+            severity=models.AlertSeverity.CRITICAL if reading.temperature > THRESHOLDS["temperature_high"] * 1.1 else models.AlertSeverity.WARNING,
+            recommendation="Check cooling systems and reduce furnace load if safe to do so.",
+            input_data={
+                "temperature": reading.temperature,
+                "gas_index": reading.gas_index,
+                "vibration_x": reading.vibration_x,
+            },
+            confidence_score=95.0,
+            detected_at=reading.timestamp,
+        )
+        db.add(signal)
+        signals_created.append(signal)
+    
+    # Gas index check
+    if reading.gas_index and reading.gas_index > THRESHOLDS["gas_index_high"]:
+        signal = models.Signal(
+            device_id=device.id,
+            factory_id=device.factory_id,
+            signal_type=models.SignalType.ANOMALY,
+            status=models.SignalStatus.NEW,
+            title="Elevated Gas Index",
+            description=f"Gas index {reading.gas_index:.1f} exceeds threshold of {THRESHOLDS['gas_index_high']}",
+            severity=models.AlertSeverity.WARNING,
+            recommendation="Check ventilation systems and air quality.",
+            input_data={
+                "gas_index": reading.gas_index,
+            },
+            confidence_score=90.0,
+            detected_at=reading.timestamp,
+        )
+        db.add(signal)
+        signals_created.append(signal)
+    
+    # Vibration check
+    max_vibration = max(
+        reading.vibration_x or 0,
+        reading.vibration_y or 0,
+        reading.vibration_z or 0
+    )
+    if max_vibration > THRESHOLDS["vibration_critical"]:
+        signal = models.Signal(
+            device_id=device.id,
+            factory_id=device.factory_id,
+            signal_type=models.SignalType.MAINTENANCE,
+            status=models.SignalStatus.NEW,
+            title="Critical Vibration Detected",
+            description=f"Vibration level {max_vibration:.2f} exceeds critical threshold",
+            severity=models.AlertSeverity.CRITICAL,
+            recommendation="Immediate maintenance required. Check for bearing wear.",
+            input_data={
+                "vibration_x": reading.vibration_x,
+                "vibration_y": reading.vibration_y,
+                "vibration_z": reading.vibration_z,
+            },
+            confidence_score=95.0,
+            detected_at=reading.timestamp,
+        )
+        db.add(signal)
+        signals_created.append(signal)
+    elif max_vibration > THRESHOLDS["vibration_warning"]:
+        signal = models.Signal(
+            device_id=device.id,
+            factory_id=device.factory_id,
+            signal_type=models.SignalType.PREDICTIVE,
+            status=models.SignalStatus.NEW,
+            title="Elevated Vibration Warning",
+            description=f"Vibration level {max_vibration:.2f} exceeds warning threshold",
+            severity=models.AlertSeverity.WARNING,
+            recommendation="Schedule preventive maintenance within 48 hours.",
+            input_data={
+                "vibration_x": reading.vibration_x,
+                "vibration_y": reading.vibration_y,
+                "vibration_z": reading.vibration_z,
+            },
+            confidence_score=85.0,
+            detected_at=reading.timestamp,
+        )
+        db.add(signal)
+        signals_created.append(signal)
+    
+    return signals_created
+
+
 def seed_database():
     """Populate database with sample data for MVP testing"""
     db = SessionLocal()
     
     try:
+        # Check if data already exists
+        existing_factory = db.query(models.Factory).first()
+        if existing_factory:
+            print("Database already has data. Skipping seed.")
+            return
+        
         # Create factories
         factory1 = models.Factory(
             name="Steel Forge Industries",
@@ -113,39 +224,61 @@ def seed_database():
         db.add_all([device1, device2, device3])
         db.commit()
         
-        # Create sample sensor readings (last 24 hours)
+        # Create sample sensor readings (last 24 hours) with some anomalies
         now = datetime.utcnow()
         devices = [device1, device2, device3]
+        all_readings = []
+        total_signals = 0
         
-        print("Generating sensor readings...")
+        print("Generating sensor readings and signals...")
         for device in devices:
+            device_signals = 0
             # Generate readings every 5 minutes for last 24 hours
             for i in range(288):  # 24 hours * 12 readings per hour
                 timestamp = now - timedelta(minutes=i * 5)
                 
-                # Simulate realistic sensor data with some variation
+                # Simulate realistic sensor data with some anomalies
                 base_temp = 850 if device.machine_name.startswith("Main") else 45
-                temp_variation = random.uniform(-20, 20)
+                
+                # Inject some anomalies randomly
+                is_anomaly = random.random() < 0.05  # 5% chance of anomaly
+                
+                if is_anomaly:
+                    temp_variation = random.uniform(50, 100)  # Higher variation for anomaly
+                    vibration_multiplier = random.uniform(2, 4)
+                    gas_multiplier = random.uniform(1.2, 1.5)
+                else:
+                    temp_variation = random.uniform(-20, 20)
+                    vibration_multiplier = 1
+                    gas_multiplier = 1
                 
                 reading = models.SensorReading(
                     device_id=device.id,
                     timestamp=timestamp,
                     temperature=base_temp + temp_variation,
-                    gas_index=random.uniform(100, 500),
-                    vibration_x=random.uniform(0.5, 3.5),
-                    vibration_y=random.uniform(0.5, 3.5),
-                    vibration_z=random.uniform(0.5, 3.5),
+                    gas_index=random.uniform(100, 350) * gas_multiplier,
+                    vibration_x=random.uniform(0.5, 3.5) * vibration_multiplier,
+                    vibration_y=random.uniform(0.5, 3.5) * vibration_multiplier,
+                    vibration_z=random.uniform(0.5, 3.5) * vibration_multiplier,
                     humidity=random.uniform(30, 70),
                     pressure=random.uniform(990, 1020),
                     power_consumption=random.uniform(15, 45)
                 )
                 db.add(reading)
+                all_readings.append((reading, device))
+                
+                # Generate signals for anomalous readings
+                if is_anomaly and i < 50:  # Only generate signals for recent anomalies
+                    signals = generate_signals_for_reading(db, reading, device)
+                    device_signals += len(signals)
+            
+            total_signals += device_signals
+            print(f"  {device.device_name}: {device_signals} signals generated")
             
             # Commit in batches
-            if devices.index(device) % 1 == 0:
-                db.commit()
+            db.commit()
         
-        db.commit()
+        print(f"Total signals generated: {total_signals}")
         
         # Create sample alerts
         alert1 = models.Alert(
@@ -193,15 +326,28 @@ def seed_database():
         db.add_all([alert1, alert2, alert3])
         db.commit()
         
+        print("\n" + "="*50)
         print("Database seeded successfully!")
+        print("="*50)
         print("\nTest Credentials:")
-        print("Admin: admin@carbonseed.io / admin123")
-        print("Factory Owner: owner@steelforge.in / password123")
-        print("Operator: operator@steelforge.in / password123")
+        print("-"*50)
+        print("Admin:          admin@carbonseed.io / admin123")
+        print("Factory Owner:  owner@steelforge.in / password123")
+        print("Operator:       operator@steelforge.in / password123")
+        print("Factory 2:      owner@chemprocessing.in / password123")
+        print("-"*50)
+        print(f"\nData Summary:")
+        print(f"  Factories: 2")
+        print(f"  Users: 4")
+        print(f"  Devices: 3")
+        print(f"  Sensor Readings: {288 * 3}")
+        print(f"  Signals: {total_signals}")
+        print(f"  Alerts: 3")
         
     except Exception as e:
         print(f"Error seeding database: {e}")
         db.rollback()
+        raise
     finally:
         db.close()
 

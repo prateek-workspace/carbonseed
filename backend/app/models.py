@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Boolean, Text, Enum as SQLEnum
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Boolean, Text, Enum as SQLEnum, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
@@ -22,6 +22,21 @@ class AlertStatus(enum.Enum):
     ACTIVE = "active"
     ACKNOWLEDGED = "acknowledged"
     RESOLVED = "resolved"
+
+
+class SignalType(enum.Enum):
+    ANOMALY = "anomaly"
+    THRESHOLD_BREACH = "threshold_breach"
+    PREDICTIVE = "predictive"
+    MAINTENANCE = "maintenance"
+    EFFICIENCY = "efficiency"
+
+
+class SignalStatus(enum.Enum):
+    NEW = "new"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    FAILED = "failed"
 
 
 class User(Base):
@@ -54,6 +69,9 @@ class Factory(Base):
     
     users = relationship("User", back_populates="factory")
     devices = relationship("Device", back_populates="factory")
+    alerts = relationship("Alert", back_populates="factory")
+    reports = relationship("Report", back_populates="factory")
+    signals = relationship("Signal", back_populates="factory")
 
 
 class Device(Base):
@@ -74,6 +92,8 @@ class Device(Base):
     
     factory = relationship("Factory", back_populates="devices")
     sensor_readings = relationship("SensorReading", back_populates="device")
+    alerts = relationship("Alert", back_populates="device")
+    signals = relationship("Signal", back_populates="device")
 
 
 class SensorReading(Base):
@@ -128,6 +148,45 @@ class Alert(Base):
     acknowledged_by = Column(Integer, ForeignKey("users.id"))
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    device = relationship("Device", back_populates="alerts")
+    factory = relationship("Factory", back_populates="alerts")
+
+
+class Signal(Base):
+    """
+    Generated signals from sensor data analysis.
+    These are insights/anomalies detected from the data using the Gemini API or rule-based logic.
+    """
+    __tablename__ = "signals"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    device_id = Column(Integer, ForeignKey("devices.id"), nullable=False, index=True)
+    factory_id = Column(Integer, ForeignKey("factories.id"), nullable=False, index=True)
+    
+    signal_type = Column(SQLEnum(SignalType), default=SignalType.ANOMALY)
+    status = Column(SQLEnum(SignalStatus), default=SignalStatus.NEW)
+    
+    # Signal details
+    title = Column(String(255), nullable=False)
+    description = Column(Text)
+    severity = Column(SQLEnum(AlertSeverity), default=AlertSeverity.INFO)
+    
+    # Analysis data
+    input_data = Column(JSON)  # Sensor data that triggered the signal
+    analysis_result = Column(JSON)  # AI analysis result
+    recommendation = Column(Text)  # Recommended action
+    
+    # Confidence score (0-100)
+    confidence_score = Column(Float)
+    
+    # Timestamps
+    detected_at = Column(DateTime(timezone=True), nullable=False)
+    processed_at = Column(DateTime(timezone=True))
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    device = relationship("Device", back_populates="signals")
+    factory = relationship("Factory", back_populates="signals")
 
 
 class Report(Base):
@@ -148,3 +207,5 @@ class Report(Base):
     
     generated_by = Column(Integer, ForeignKey("users.id"))
     generated_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    factory = relationship("Factory", back_populates="reports")

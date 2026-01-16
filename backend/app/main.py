@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.database import engine, Base
-from app.routers import auth, devices, data, insights, reports, simulator
+from app.routers import auth, devices, data, insights, reports, simulator, signals, factories
 from app.config import settings
 
 # Create database tables
@@ -35,9 +35,11 @@ app.add_middleware(
 
 # Include routers
 app.include_router(auth.router)
+app.include_router(factories.router)
 app.include_router(devices.router)
 app.include_router(data.router)
 app.include_router(insights.router)
+app.include_router(signals.router)
 app.include_router(reports.router)
 app.include_router(simulator.router)
 

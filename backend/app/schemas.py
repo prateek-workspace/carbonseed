@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr, Field
-from typing import Optional, List
+from typing import Optional, List, Any, Dict
 from datetime import datetime
 from enum import Enum
 
@@ -22,6 +22,21 @@ class AlertStatus(str, Enum):
     ACTIVE = "active"
     ACKNOWLEDGED = "acknowledged"
     RESOLVED = "resolved"
+
+
+class SignalType(str, Enum):
+    ANOMALY = "anomaly"
+    THRESHOLD_BREACH = "threshold_breach"
+    PREDICTIVE = "predictive"
+    MAINTENANCE = "maintenance"
+    EFFICIENCY = "efficiency"
+
+
+class SignalStatus(str, Enum):
+    NEW = "new"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    FAILED = "failed"
 
 
 # User Schemas
@@ -50,6 +65,14 @@ class User(UserBase):
         from_attributes = True
 
 
+class UserWithFactory(User):
+    """User with factory details for login response"""
+    factory: Optional["Factory"] = None
+    
+    class Config:
+        from_attributes = True
+
+
 # Token Schemas
 class Token(BaseModel):
     access_token: str
@@ -58,6 +81,17 @@ class Token(BaseModel):
 
 class TokenData(BaseModel):
     email: Optional[str] = None
+
+
+class LoginResponse(BaseModel):
+    """Enhanced login response with user details and redirect info"""
+    access_token: str
+    token_type: str
+    user: User
+    redirect_url: str  # Where to redirect based on role
+    
+    class Config:
+        from_attributes = True
 
 
 # Factory Schemas
@@ -73,9 +107,27 @@ class FactoryCreate(FactoryBase):
     pass
 
 
+class FactoryUpdate(BaseModel):
+    name: Optional[str] = None
+    location: Optional[str] = None
+    industry: Optional[str] = None
+    contact_email: Optional[str] = None
+    contact_phone: Optional[str] = None
+
+
 class Factory(FactoryBase):
     id: int
     created_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+
+class FactoryWithStats(Factory):
+    """Factory with aggregated statistics"""
+    device_count: int = 0
+    user_count: int = 0
+    active_alerts: int = 0
     
     class Config:
         from_attributes = True
@@ -188,6 +240,46 @@ class Alert(AlertBase):
         from_attributes = True
 
 
+# Signal Schemas
+class SignalBase(BaseModel):
+    signal_type: SignalType
+    title: str
+    description: Optional[str] = None
+    severity: AlertSeverity = AlertSeverity.INFO
+    recommendation: Optional[str] = None
+
+
+class SignalCreate(SignalBase):
+    device_id: int
+    factory_id: int
+    input_data: Optional[Dict[str, Any]] = None
+    detected_at: datetime
+
+
+class Signal(SignalBase):
+    id: int
+    device_id: int
+    factory_id: int
+    status: SignalStatus
+    input_data: Optional[Dict[str, Any]]
+    analysis_result: Optional[Dict[str, Any]]
+    confidence_score: Optional[float]
+    detected_at: datetime
+    processed_at: Optional[datetime]
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+
+class SignalWithDevice(Signal):
+    """Signal with device info for listing"""
+    device: Optional[Device] = None
+    
+    class Config:
+        from_attributes = True
+
+
 # Insights Schema
 class InsightMetrics(BaseModel):
     avg_temperature: Optional[float]
@@ -227,3 +319,21 @@ class Report(ReportBase):
     
     class Config:
         from_attributes = True
+
+
+# Dashboard Stats Schema
+class DashboardStats(BaseModel):
+    total_devices: int
+    active_devices: int
+    total_alerts: int
+    active_alerts: int
+    total_signals: int
+    new_signals: int
+    avg_temperature: Optional[float]
+    avg_gas_index: Optional[float]
+    vibration_health_score: Optional[float]
+    energy_consumption_24h: Optional[float]
+
+
+# Update forward references
+UserWithFactory.model_rebuild()
