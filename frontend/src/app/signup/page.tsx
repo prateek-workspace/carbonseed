@@ -5,32 +5,62 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 
-export default function LoginPage() {
+export default function SignupPage() {
   const router = useRouter();
+  const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setSuccess('');
+
+    // Validate passwords match
+    if (password !== confirmPassword) {
+      setError('Passwords do not match');
+      return;
+    }
+
+    // Validate password length
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters');
+      return;
+    }
+
     setLoading(true);
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/auth/login`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/auth/signup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ 
+          email, 
+          password,
+          full_name: fullName,
+          role: 'viewer' // Default role for public signup
+        }),
       });
 
-      if (!response.ok) throw new Error('Invalid email or password');
-
       const data = await response.json();
-      localStorage.setItem('token', data.access_token);
-      router.push('/dashboard');
+
+      if (!response.ok) {
+        throw new Error(data.detail || 'Signup failed');
+      }
+
+      setSuccess('Account created successfully! Redirecting to login...');
+      
+      // Redirect to login after 2 seconds
+      setTimeout(() => {
+        router.push('/login');
+      }, 2000);
+
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed');
+      setError(err instanceof Error ? err.message : 'Signup failed');
     } finally {
       setLoading(false);
     }
@@ -44,11 +74,11 @@ export default function LoginPage() {
         <div className="absolute inset-0 opacity-10">
           <svg className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
             <defs>
-              <pattern id="login-grid" x="0" y="0" width="40" height="40" patternUnits="userSpaceOnUse">
+              <pattern id="signup-grid" x="0" y="0" width="40" height="40" patternUnits="userSpaceOnUse">
                 <circle cx="20" cy="20" r="1" fill="white" />
               </pattern>
             </defs>
-            <rect width="100%" height="100%" fill="url(#login-grid)" />
+            <rect width="100%" height="100%" fill="url(#signup-grid)" />
           </svg>
         </div>
         
@@ -66,14 +96,14 @@ export default function LoginPage() {
           >
             <div className="w-16 h-16 rounded-2xl bg-accent-green/20 flex items-center justify-center mb-8">
               <svg className="w-8 h-8 text-accent-green" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
               </svg>
             </div>
             <h2 className="text-3xl font-semibold text-white mb-4 leading-tight">
-              Industrial intelligence for the modern factory.
+              Join the industrial revolution.
             </h2>
             <p className="text-lg text-white/60 leading-relaxed">
-              Real-time monitoring, predictive maintenance, and automated compliance — all in one platform.
+              Create your account and start monitoring your factory operations with AI-powered insights.
             </p>
           </motion.div>
           
@@ -100,8 +130,8 @@ export default function LoginPage() {
             <span className="text-xl font-semibold text-ink">carbonseed</span>
           </Link>
 
-          <h1 className="text-2xl font-semibold text-ink mb-2">Welcome back</h1>
-          <p className="text-ink-muted mb-8">Sign in to access your dashboard</p>
+          <h1 className="text-2xl font-semibold text-ink mb-2">Create an account</h1>
+          <p className="text-ink-muted mb-8">Start your journey with Carbonseed</p>
 
           {error && (
             <motion.div
@@ -113,7 +143,30 @@ export default function LoginPage() {
             </motion.div>
           )}
 
+          {success && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-6 p-4 bg-green-50 border border-green-100 rounded-xl text-green-600 text-sm"
+            >
+              {success}
+            </motion.div>
+          )}
+
           <form onSubmit={handleSubmit} className="space-y-5">
+            <div>
+              <label htmlFor="fullName" className="block text-sm font-medium text-ink mb-2">Full Name</label>
+              <input
+                id="fullName"
+                type="text"
+                required
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                className="w-full px-4 py-3.5 bg-surface-muted border-0 rounded-xl text-ink placeholder-ink-faint focus:outline-none focus:ring-2 focus:ring-accent-green/30 transition-all"
+                placeholder="John Doe"
+              />
+            </div>
+
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-ink mb-2">Email</label>
               <input
@@ -140,9 +193,22 @@ export default function LoginPage() {
               />
             </div>
 
+            <div>
+              <label htmlFor="confirmPassword" className="block text-sm font-medium text-ink mb-2">Confirm Password</label>
+              <input
+                id="confirmPassword"
+                type="password"
+                required
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                className="w-full px-4 py-3.5 bg-surface-muted border-0 rounded-xl text-ink placeholder-ink-faint focus:outline-none focus:ring-2 focus:ring-accent-green/30 transition-all"
+                placeholder="••••••••"
+              />
+            </div>
+
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || !!success}
               className="w-full py-3.5 bg-ink text-white font-medium rounded-xl hover:bg-ink/90 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-ink/10"
             >
               {loading ? (
@@ -151,35 +217,20 @@ export default function LoginPage() {
                     <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeOpacity="0.2" />
                     <path d="M12 2a10 10 0 0110 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
                   </svg>
-                  Signing in...
+                  Creating account...
                 </span>
-              ) : 'Sign in'}
+              ) : 'Create account'}
             </button>
           </form>
 
-          <div className="mt-8 p-5 bg-surface-muted rounded-xl">
-            <p className="text-xs font-medium text-ink-muted mb-3">Demo credentials</p>
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-ink-faint">Admin</span>
-                <span className="font-mono text-ink text-xs">admin@carbonseed.io</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-ink-faint">Owner</span>
-                <span className="font-mono text-ink text-xs">owner@steelforge.in</span>
-              </div>
-              <p className="text-xs text-ink-faint pt-2 border-t border-border mt-2">Password: admin123 / password123</p>
-            </div>
-          </div>
-
           <p className="mt-6 text-center text-sm text-ink-muted">
-            Don&apos;t have an account?{' '}
-            <Link href="/signup" className="text-accent-green hover:underline font-medium">
-              Sign up
+            Already have an account?{' '}
+            <Link href="/login" className="text-accent-green hover:underline font-medium">
+              Sign in
             </Link>
           </p>
 
-          <div className="mt-4 text-center">
+          <div className="mt-6 text-center">
             <Link href="/" className="text-sm text-ink-muted hover:text-accent-green transition-colors">
               ← Back to homepage
             </Link>

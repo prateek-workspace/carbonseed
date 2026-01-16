@@ -80,6 +80,45 @@ async def read_users_me(current_user: models.User = Depends(auth.get_current_act
     return current_user
 
 
+@router.post("/signup", response_model=schemas.User)
+async def signup(
+    user_data: schemas.UserCreate,
+    db: Session = Depends(get_db)
+):
+    """
+    Public signup endpoint.
+    Creates a new user with VIEWER role by default.
+    Users can be promoted to other roles by admins later.
+    """
+    # Check if user already exists
+    existing_user = db.query(models.User).filter(
+        models.User.email == user_data.email
+    ).first()
+    
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User with this email already exists"
+        )
+    
+    # Create new user with VIEWER role (default for public signup)
+    hashed_password = auth.get_password_hash(user_data.password)
+    db_user = models.User(
+        email=user_data.email,
+        hashed_password=hashed_password,
+        full_name=user_data.full_name,
+        role=models.UserRole.VIEWER,  # Default role for public signup
+        factory_id=None,  # No factory assigned initially
+        is_active=True
+    )
+    
+    db.add(db_user)
+    db.commit()
+    db.refresh(db_user)
+    
+    return db_user
+
+
 @router.post("/register", response_model=schemas.User)
 async def register_user(
     user_data: schemas.UserCreate,
