@@ -177,6 +177,7 @@ The system uses **simple, explainable analytics**:
 - **SensorReading** - Time series sensor data
 - **Alert** - System-generated alerts
 - **Report** - Compliance reports
+- Carbonseed brings real-time monitoring, predictive maintenance, and automated compliance to Indian MSMEs at a fraction of traditional costs.
 
 ## License
 
